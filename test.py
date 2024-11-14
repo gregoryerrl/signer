@@ -1,158 +1,161 @@
 import cv2
 import mediapipe as mp
 import numpy as np
-import os
 import json
 import time
-import re
 
-class HolisticGestureRecognizer:
-    def __init__(self, data_path, confidence_threshold=0.6):
+class SignTester:
+    def __init__(self):
+        # Initialize MediaPipe
         self.mp_holistic = mp.solutions.holistic
+        self.mp_drawing = mp.solutions.drawing_utils
         self.holistic = self.mp_holistic.Holistic(
-            static_image_mode=False,
-            model_complexity=2,
             min_detection_confidence=0.7,
-            min_tracking_confidence=0.5
+            min_tracking_confidence=0.7
         )
-        self.mp_draw = mp.solutions.drawing_utils
-
-        # Load gesture data
-        self.gesture_data = self._load_gesture_data(data_path)
-        self.word = []
-        self.last_gesture = None
-        self.last_time = time.time()
         
-        # Initialize autocorrect buffer
-        self.current_input = ""
-        self.corrected_text = ""
+        self.trained_signs = self.load_sign_data()
+        self.sentence = []
+        self.last_sign_time = time.time()
+        self.buffer_time = 2.0  # Buffer time between sign detections
+        self.last_detected_sign = None
 
-    def _load_gesture_data(self, data_path):
+    def load_sign_data(self):
+        """Load trained signs from JSON."""
         try:
-            with open(data_path, "r") as f:
-                data = json.load(f)
-            return {gesture: np.array(sample) for gesture, sample in data.items()}
-        except (FileNotFoundError, json.JSONDecodeError) as e:
-            print(f"Error loading gesture data: {e}")
+            with open("sign_data/signs.json", 'r') as f:
+                return json.load(f)
+        except FileNotFoundError:
+            print("No trained signs found.")
             return {}
 
-    def _get_gesture(self, results):
-        """Identify the gesture based on landmarks."""
-        if not results.multi_hand_landmarks:
-            return None
+    def extract_landmarks(self, results):
+        """Extract landmarks from MediaPipe results."""
+        landmarks = {'face': None, 'left_hand': None, 'right_hand': None}
+        if results.face_landmarks:
+            landmarks['face'] = [[lm.x, lm.y, lm.z] for lm in results.face_landmarks.landmark]
+        if results.left_hand_landmarks:
+            landmarks['left_hand'] = [[lm.x, lm.y, lm.z] for lm in results.left_hand_landmarks.landmark]
+        if results.right_hand_landmarks:
+            landmarks['right_hand'] = [[lm.x, lm.y, lm.z] for lm in results.right_hand_landmarks.landmark]
+        return landmarks
 
-        for hand_landmarks in results.multi_hand_landmarks:
-            landmarks = np.array([[lm.x, lm.y, lm.z] for lm in hand_landmarks.landmark])
-            
-            # Normalize landmarks for scale invariance
-            landmarks -= landmarks[0]
+    def compare_landmarks(self, current, trained):
+        """Compare current landmarks with trained landmarks."""
+        score = 0
+        total = 0
+        for key in ['left_hand', 'right_hand', 'face']:
+            if current[key] and trained.get(key):
+                current_arr = np.array(current[key])
+                trained_arr = np.array(trained[key])
+                if current_arr.shape != trained_arr.shape:
+                    continue
+                distance = np.mean(np.sqrt(np.sum((current_arr - trained_arr) ** 2, axis=1)))
+                similarity = 1 / (1 + distance)
+                score += similarity
+                total += 1
+        return score / total if total > 0 else 0
 
-            for gesture, sample_landmarks in self.gesture_data.items():
-                diff = np.linalg.norm(landmarks - sample_landmarks, axis=1).mean()
-                
-                # Adjusted threshold for better detection
-                if diff < 0.05:  # Experiment with this value based on your data
-                    return gesture
+    def detect_sign(self, results):
+        """Detect the sign from current landmarks and return the best match."""
+        current_landmarks = self.extract_landmarks(results)
+        best_match = None
+        best_score = 0.8  # Minimum threshold
+        
+        for sign_name, sign_data in self.trained_signs.items():
+            score = self.compare_landmarks(current_landmarks, sign_data)
+            if score > best_score:
+                best_score = score
+                best_match = sign_name
+        
+        # Use buffer time to prevent rapid detection
+        if best_match and (time.time() - self.last_sign_time > self.buffer_time):
+            self.last_sign_time = time.time()
+            return best_match
         return None
 
-    def autocorrect(self, input_text):
-        """Comprehensive autocorrection system for simple conversations"""
-        input_text = input_text.strip().title()
-        
-        # Static corrections
-        static_phrases = {
-            "Thank You": "Thank you",
-            "I Love You": "I love you",
-            "Yes": "Yes",
-            "No": "No",
-            "Good Meet You": "Nice to meet you",
-            "Hi Good Meet You": "Hi, nice to meet you",
-            "Me Student": "I am a student",
-            "You Student": "Are you a student?"
-        }
-        
-        # Check for static phrases first
-        if input_text in static_phrases:
-            return static_phrases[input_text]
-        
-        # Regular expression patterns for dynamic corrections
-        patterns = {
-            r'^Me Name ([A-Z][a-zA-Z]*)$': lambda m: f"My name is {m.group(1)}",
-            r'^Me Live ([A-Z][a-zA-Z\s]*)$': lambda m: f"I live in {m.group(1)}",
-            r'^Me (Feel|Am) (Good|Fine|Great|Beautiful)$': lambda m: f"I am {m.group(2).lower()}",
-            r'^You (Good|Fine|Great|Beautiful)$': lambda m: f"Are you {m.group(1).lower()}?",
-            r'^Me Hungry$': lambda m: "I am hungry",
-            r'^You Hungry$': lambda m: "Are you hungry?"
-        }
-        
-        for pattern, replacement in patterns.items():
-            match = re.match(pattern, input_text)
-            if match:
-                return replacement(match)
-        
-        return input_text
+    def update_sentence(self, detected_sign):
+        """Update the sentence with the detected sign."""
+        if detected_sign == "_":
+            self.sentence.append(" ")
+        elif detected_sign == ">":
+            if self.sentence:
+                self.sentence.pop()
+        else:
+            self.sentence.append(detected_sign)
 
-    def process_frame(self, frame):
-        """Process a frame and handle word-building."""
-        frame = cv2.flip(frame, 1)
-        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        results = self.holistic.process(rgb_frame)
+    def draw_panel(self, display):
+        """Draw the text panel beside the camera feed."""
+        cv2.rectangle(display, (20, 20), (620, 700), (50, 50, 50), -1)
+        
+        # Display the constructed sentence
+        sentence_text = "".join(self.sentence)
+        words = sentence_text.split()
+        lines = []
+        current_line = []
 
-        current_time = time.time()
-        gesture = self._get_gesture(results)
-
-        if gesture and current_time - self.last_time > 0.8:
-            if gesture == "_":  # Space gesture
-                self.word.append(" ")
-            elif gesture == ">":  # Backspace gesture
-                if self.word:
-                    self.word.pop()
+        for word in words:
+            if len(" ".join(current_line + [word])) > 25:
+                lines.append(" ".join(current_line))
+                current_line = [word]
             else:
-                self.word.append(gesture)
-            
-            self.current_input = ''.join(self.word).strip()
-            self.corrected_text = self.autocorrect(self.current_input)
-            
-            self.last_gesture = gesture
-            self.last_time = current_time
+                current_line.append(word)
+        if current_line:
+            lines.append(" ".join(current_line))
 
-        return frame
+        # Render each line of the sentence
+        y_pos = 60
+        for line in lines:
+            cv2.putText(display, line, (40, y_pos), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+            y_pos += 40
 
-    def get_display_text(self):
-        return self.current_input, self.corrected_text
-
-def main():
-    cap = cv2.VideoCapture(0)
-    recognizer = HolisticGestureRecognizer(data_path="asl_data/holistic_data.json")
-    window_name = "ASL Recognition with Autocorrect"
-    cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
-
-    while cap.isOpened():
-        ret, frame = cap.read()
-        if not ret:
-            break
-
-        frame = recognizer.process_frame(frame)
-        input_text, corrected_text = recognizer.get_display_text()
+        # Display the last detected sign
+        if self.last_detected_sign:
+            cv2.putText(display, f"Detected Sign: {self.last_detected_sign}", (40, 500), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
         
-        height, width = frame.shape[:2]
-        output_frame = np.zeros((height, width * 2, 3), dtype=np.uint8)
-        output_frame[:, :width] = frame
+        # Show buffer progress bar
+        time_since_last = time.time() - self.last_sign_time
+        if time_since_last < self.buffer_time:
+            progress = int((time_since_last / self.buffer_time) * 100)
+            cv2.rectangle(display, (40, 650), (40 + progress * 5, 670), (0, 255, 0), -1)
 
-        right_panel = np.zeros((height, width, 3), dtype=np.uint8)
-        cv2.putText(right_panel, "Input: " + input_text, (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
-        cv2.putText(right_panel, "Autocorrect: " + corrected_text, (10, 150), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+    def run(self):
+        cap = cv2.VideoCapture(0)
+        cv2.namedWindow('Sign Language to Text', cv2.WINDOW_NORMAL)
+        cv2.resizeWindow('Sign Language to Text', 1280, 720)
 
-        output_frame[:, width:] = right_panel
-        cv2.line(output_frame, (width, 0), (width, height), (255, 255, 255), 2)
+        while cap.isOpened():
+            ret, frame = cap.read()
+            if not ret:
+                break
 
-        cv2.imshow(window_name, output_frame)
+            # Flip frame and convert to RGB
+            frame = cv2.flip(frame, 1)
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            results = self.holistic.process(frame_rgb)
 
-        if cv2.waitKey(1) & 0xFF == 27:
-            break
+            # Create a display canvas
+            display = np.zeros((720, 1280, 3), dtype=np.uint8)
+            frame_resized = cv2.resize(frame, (640, 720))
+            display[:, 640:] = frame_resized
 
-    cap.release()
-    cv2.destroyAllWindows()
+            # Detect signs
+            detected_sign = self.detect_sign(results)
+            if detected_sign:
+                self.last_detected_sign = detected_sign
+                self.update_sentence(detected_sign)
+
+            # Draw the panel with the text
+            self.draw_panel(display)
+            
+            cv2.imshow('Sign Language to Text', display)
+            
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+
+        cap.release()
+        cv2.destroyAllWindows()
 
 if __name__ == "__main__":
-    main()
+    tester = SignTester()
+    tester.run()
