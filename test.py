@@ -3,10 +3,55 @@ import mediapipe as mp
 import numpy as np
 import json
 import time
+import autocorrect
+import requests
+import pygame
+import os
+
+def text_to_speech(sentence):
+    
+        url = "https://api.play.ht/api/v2/tts/stream"
+        headers = {
+            'X-USER-ID': 'nD3EQXVYNWgHncvsW6Sl5s0eoRF2',
+            'AUTHORIZATION': '39f94d3b6ee147b8a637bcb38d1b820d',
+            'accept': 'audio/mpeg',
+            'content-type': 'application/json'
+        }
+        data = {
+            "text": sentence,
+            "voice": "s3://voice-cloning-zero-shot/d9ff78ba-d016-47f6-b0ef-dd630f59414e/female-cs/manifest.json",
+            "output_format": "mp3"
+        }
+        
+        # Make the POST request to the API
+        response = requests.post(url, headers=headers, json=data)
+        
+        if response.status_code == 200:
+            # Save the audio file
+            with open("result.mp3", "wb") as file:
+                file.write(response.content)
+            pygame.mixer.init()
+            pygame.mixer.music.load("result.mp3")
+            pygame.mixer.music.play()
+        
+            # Wait until playback is done
+            while pygame.mixer.music.get_busy():
+                pygame.time.Clock().tick(10)
+            
+            pygame.mixer.music.unload()
+            if os.path.exists("result.mp3"):
+                os.remove("result.mp3")
+        else:
+            print(f"Error: Unable to generate speech. Status code: {response.status_code} Error: {response.text}")
+
+
 
 class SignTester:
     def __init__(self):
+        self.corrected_sentence = ""
+
         # Initialize MediaPipe
+        
         self.mp_holistic = mp.solutions.holistic
         self.mp_drawing = mp.solutions.drawing_utils
         self.holistic = self.mp_holistic.Holistic(
@@ -17,7 +62,7 @@ class SignTester:
         self.trained_signs = self.load_sign_data()
         self.sentence = []
         self.last_sign_time = time.time()
-        self.buffer_time = 2.0  # Buffer time between sign detections
+        self.buffer_time = 3.0  # Buffer time between sign detections
         self.last_detected_sign = None
 
     def load_sign_data(self):
@@ -60,7 +105,7 @@ class SignTester:
         """Detect the sign from current landmarks and return the best match."""
         current_landmarks = self.extract_landmarks(results)
         best_match = None
-        best_score = 0.8  # Minimum threshold
+        best_score = 0.6  # Minimum threshold
         
         for sign_name, sign_data in self.trained_signs.items():
             score = self.compare_landmarks(current_landmarks, sign_data)
@@ -73,24 +118,56 @@ class SignTester:
             self.last_sign_time = time.time()
             return best_match
         return None
-
+    
+    def realtime_sign(self, results):
+        """Detect the sign from current landmarks and return the best match."""
+        current_landmarks = self.extract_landmarks(results)
+        best_match = None
+        best_score = 0.6  # Minimum threshold
+        
+        for sign_name, sign_data in self.trained_signs.items():
+            score = self.compare_landmarks(current_landmarks, sign_data)
+            if score > best_score:
+                best_score = score
+                best_match = sign_name
+        
+        # Use buffer time to prevent rapid detection
+        if best_match:
+            return best_match
+        return None
+   
     def update_sentence(self, detected_sign):
-        """Update the sentence with the detected sign."""
+        
         if detected_sign == "_":
             self.sentence.append(" ")
         elif detected_sign == ">":
             if self.sentence:
                 self.sentence.pop()
+        elif detected_sign == "-":  # Enter key to convert to speech
+            # Convert the current sentence to a string
+            sentence_text = "".join(self.sentence)
+            # Apply autocorrection
+            self.corrected_sentence = autocorrect.autocorrect(sentence_text)
+            
+            # Call the text-to-speech function
+            text_to_speech(self.corrected_sentence)
+            
+            # Reset the sentence after playing the audio
+            self.sentence.clear()
+            self.corrected_sentence = ""
         else:
             self.sentence.append(detected_sign)
+            # Update the autocorrected sentence
+            sentence_text = "".join(self.sentence)
+            self.corrected_sentence = autocorrect.autocorrect(sentence_text)
 
     def draw_panel(self, display):
-        """Draw the text panel beside the camera feed."""
+    
         cv2.rectangle(display, (20, 20), (620, 700), (50, 50, 50), -1)
-        
-        # Display the constructed sentence
-        sentence_text = "".join(self.sentence)
-        words = sentence_text.split()
+
+        # Display the constructed sentence (before autocorrect)
+        raw_sentence_text = "".join(self.sentence)
+        words = raw_sentence_text.split()
         lines = []
         current_line = []
 
@@ -103,21 +180,25 @@ class SignTester:
         if current_line:
             lines.append(" ".join(current_line))
 
-        # Render each line of the sentence
         y_pos = 60
         for line in lines:
             cv2.putText(display, line, (40, y_pos), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
             y_pos += 40
 
+        # Display the autocorrected sentence
+        cv2.putText(display, "Autocorrected:", (40, 400), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+        cv2.putText(display, self.corrected_sentence, (40, 450), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+
         # Display the last detected sign
-        if self.last_detected_sign:
-            cv2.putText(display, f"Detected Sign: {self.last_detected_sign}", (40, 500), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
         
+        cv2.putText(display, f"Sign: {self.sign}",
+                        (40, 550), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
+
         # Show buffer progress bar
         time_since_last = time.time() - self.last_sign_time
         if time_since_last < self.buffer_time:
             progress = int((time_since_last / self.buffer_time) * 100)
-            cv2.rectangle(display, (40, 650), (40 + progress * 5, 670), (0, 255, 0), -1)
+            cv2.rectangle(display, (40, 650), (40 + progress * 5, 670), (255, 0, 0), -1)
 
     def run(self):
         cap = cv2.VideoCapture(0)
@@ -145,6 +226,7 @@ class SignTester:
                 self.last_detected_sign = detected_sign
                 self.update_sentence(detected_sign)
 
+            self.sign = self.realtime_sign(results)
             # Draw the panel with the text
             self.draw_panel(display)
             
@@ -159,3 +241,4 @@ class SignTester:
 if __name__ == "__main__":
     tester = SignTester()
     tester.run()
+

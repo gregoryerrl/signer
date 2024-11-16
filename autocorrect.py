@@ -90,9 +90,3 @@ def autocorrect(input_text):
     return input_text
 
 # Interactive mode
-print("\nInteractive mode (type 'exit' to quit):")
-while True:
-    user_input = input("\nEnter text to autocorrect: ")
-    if user_input.lower() == 'exit':
-        break
-    print("Corrected:", autocorrect(user_input))

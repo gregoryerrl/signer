@@ -3,6 +3,7 @@ import mediapipe as mp
 import numpy as np
 import json
 import os
+import time
 
 class SignRecorder:
     def __init__(self):
@@ -85,9 +86,10 @@ class SignRecorder:
             key = cv2.waitKey(1) & 0xFF
             if key == ord('s'):
                 sign_name = input("Enter sign name: ")
-                landmarks = self.capture_landmarks(results)
-                self.add_sign(sign_name, landmarks)
-                self.save_sign_data()
+                if sign_name != "":
+                    landmarks = self.capture_landmarks(results)
+                    self.add_sign(sign_name, landmarks)
+                    self.save_sign_data()
             elif key == ord('q'):
                 break
 
