@@ -202,8 +202,6 @@ class SignTester:
 
     def run(self):
         cap = cv2.VideoCapture(0)
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
         cap.set(cv2.CAP_PROP_FPS, 30)
         cv2.namedWindow('Sign Language to Text', cv2.WINDOW_NORMAL)
         cv2.resizeWindow('Sign Language to Text', 1280, 720)
@@ -220,7 +218,7 @@ class SignTester:
 
             # Create a display canvas
             display = np.zeros((720, 1280, 3), dtype=np.uint8)
-            frame_resized = cv2.resize(frame, (320, 240))
+            frame_resized = cv2.resize(frame, (640, 720))
             display[:, 640:] = frame_resized
 
             # Detect signs
