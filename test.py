@@ -62,7 +62,7 @@ class SignTester:
         self.trained_signs = self.load_sign_data()
         self.sentence = []
         self.last_sign_time = time.time()
-        self.buffer_time = 3.0  # Buffer time between sign detections
+        self.buffer_time = 6.0  # Buffer time between sign detections
         self.last_detected_sign = None
 
     def load_sign_data(self):
