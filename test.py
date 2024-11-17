@@ -55,8 +55,9 @@ class SignTester:
         self.mp_holistic = mp.solutions.holistic
         self.mp_drawing = mp.solutions.drawing_utils
         self.holistic = self.mp_holistic.Holistic(
-            min_detection_confidence=0.7,
-            min_tracking_confidence=0.7
+            min_detection_confidence=0.5,
+            min_tracking_confidence=0.5,
+            model_complexity=0
         )
         
         self.trained_signs = self.load_sign_data()
@@ -64,6 +65,7 @@ class SignTester:
         self.last_sign_time = time.time()
         self.buffer_time = 6.0  # Buffer time between sign detections
         self.last_detected_sign = None
+        self.frame_skip_rate = 2
 
     def load_sign_data(self):
         """Load trained signs from JSON."""
@@ -78,11 +80,11 @@ class SignTester:
         """Extract landmarks from MediaPipe results."""
         landmarks = {'face': None, 'left_hand': None, 'right_hand': None}
         if results.face_landmarks:
-            landmarks['face'] = [[lm.x, lm.y, lm.z] for lm in results.face_landmarks.landmark]
+            landmarks['face'] = np.array([[lm.x, lm.y, lm.z] for lm in results.face_landmarks.landmark])
         if results.left_hand_landmarks:
-            landmarks['left_hand'] = [[lm.x, lm.y, lm.z] for lm in results.left_hand_landmarks.landmark]
+            landmarks['left_hand'] = np.array([[lm.x, lm.y, lm.z] for lm in results.left_hand_landmarks.landmark])
         if results.right_hand_landmarks:
-            landmarks['right_hand'] = [[lm.x, lm.y, lm.z] for lm in results.right_hand_landmarks.landmark]
+            landmarks['right_hand'] = np.array([[lm.x, lm.y, lm.z] for lm in results.right_hand_landmarks.landmark])
         return landmarks
 
     def compare_landmarks(self, current, trained):
@@ -105,15 +107,12 @@ class SignTester:
         """Detect the sign from current landmarks and return the best match."""
         current_landmarks = self.extract_landmarks(results)
         best_match = None
-        best_score = 0.6  # Minimum threshold
-        
+        best_score = 0.6
         for sign_name, sign_data in self.trained_signs.items():
             score = self.compare_landmarks(current_landmarks, sign_data)
             if score > best_score:
                 best_score = score
                 best_match = sign_name
-        
-        # Use buffer time to prevent rapid detection
         if best_match and (time.time() - self.last_sign_time > self.buffer_time):
             self.last_sign_time = time.time()
             return best_match
@@ -204,7 +203,7 @@ class SignTester:
         cap = cv2.VideoCapture(0)
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 320)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)
-        cap.set(cv2.CAP_PROP_FPS, 30)
+        cap.set(cv2.CAP_PROP_FPS, 15)
         cv2.namedWindow('Sign Language to Text', cv2.WINDOW_NORMAL)
         cv2.resizeWindow('Sign Language to Text', 1280, 720)
 
