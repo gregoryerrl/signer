@@ -55,8 +55,8 @@ class SignTester:
         self.mp_holistic = mp.solutions.holistic
         self.mp_drawing = mp.solutions.drawing_utils
         self.holistic = self.mp_holistic.Holistic(
-            min_detection_confidence=0.9,
-            min_tracking_confidence=0.9,
+            min_detection_confidence=0.5,
+            min_tracking_confidence=0.5,
             model_complexity=0
         )
         
