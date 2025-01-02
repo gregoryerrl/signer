@@ -78,8 +78,6 @@ class SignTester:
     def extract_landmarks(self, results):
         """Extract landmarks from MediaPipe results."""
         landmarks = {'face': None, 'left_hand': None, 'right_hand': None}
-        if results.face_landmarks:
-            landmarks['face'] = [[lm.x, lm.y, lm.z] for lm in results.face_landmarks.landmark]
         if results.left_hand_landmarks:
             landmarks['left_hand'] = [[lm.x, lm.y, lm.z] for lm in results.left_hand_landmarks.landmark]
         if results.right_hand_landmarks:
