@@ -241,6 +241,15 @@ class SignTester:
             self.sign = self.realtime_sign(results)
             # Draw the panel with the text
             self.draw_panel(display)
+
+            if results.face_landmarks:
+                self.mp_drawing.draw_landmarks(frame, results.face_landmarks, self.mp_holistic.FACEMESH_CONTOURS)
+            if results.left_hand_landmarks:
+                self.mp_drawing.draw_landmarks(frame, results.left_hand_landmarks, self.mp_holistic.HAND_CONNECTIONS)
+            if results.right_hand_landmarks:
+                self.mp_drawing.draw_landmarks(frame, results.right_hand_landmarks, self.mp_holistic.HAND_CONNECTIONS)
+
+            cv2.imshow('Training', frame)
             
             cv2.imshow('Sign Language to Text', display)
             
