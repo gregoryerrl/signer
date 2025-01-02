@@ -223,7 +223,7 @@ class SignTester:
                 break
 
             # Flip frame and convert to RGB
-            frame = cv2.flip(frame, 1)
+            frame = cv2(frame, 1)
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             results = self.holistic.process(frame_rgb)
 
@@ -243,11 +243,11 @@ class SignTester:
             self.draw_panel(display)
 
             if results.face_landmarks:
-                self.mp_drawing.draw_landmarks(display, results.face_landmarks, self.mp_holistic.FACEMESH_CONTOURS)
+                self.mp_drawing.draw_landmarks(frame_resized, results.face_landmarks, self.mp_holistic.FACEMESH_CONTOURS)
             if results.left_hand_landmarks:
-                self.mp_drawing.draw_landmarks(display, results.left_hand_landmarks, self.mp_holistic.HAND_CONNECTIONS)
+                self.mp_drawing.draw_landmarks(frame_resized, results.left_hand_landmarks, self.mp_holistic.HAND_CONNECTIONS)
             if results.right_hand_landmarks:
-                self.mp_drawing.draw_landmarks(display, results.right_hand_landmarks, self.mp_holistic.HAND_CONNECTIONS)
+                self.mp_drawing.draw_landmarks(frame_resized, results.right_hand_landmarks, self.mp_holistic.HAND_CONNECTIONS)
             
             cv2.imshow('Sign Language to Text', display)
             
