@@ -63,7 +63,7 @@ class SignTester:
         self.trained_signs = self.load_sign_data()
         self.sentence = []
         self.last_sign_time = time.time()
-        self.buffer_time = 6.0  # Buffer time between sign detections
+        self.buffer_time = 3.0  # Buffer time between sign detections
         self.last_detected_sign = None
 
     def load_sign_data(self):
@@ -105,8 +105,11 @@ class SignTester:
     def detect_sign(self, results):
         """Detect the sign from current landmarks and return the best match."""
         current_landmarks = self.extract_landmarks(results)
+        if not current_landmarks['left_hand'] and not current_landmarks['right_hand']:
+            return None  # Do nothing if no hand landmarks are detected
+    
         best_match = None
-        best_score = 0.6  # Minimum threshold
+        best_score = 0.7  # Minimum threshold
         
         for sign_name, sign_data in self.trained_signs.items():
             score = self.compare_landmarks(current_landmarks, sign_data)
@@ -123,6 +126,10 @@ class SignTester:
     def realtime_sign(self, results):
         """Detect the sign from current landmarks and return the best match."""
         current_landmarks = self.extract_landmarks(results)
+
+        if not current_landmarks['left_hand'] and not current_landmarks['right_hand']:
+            return None  # Do nothing if no hand landmarks are detected
+    
         best_match = None
         best_score = 0.6  # Minimum threshold
         
@@ -138,7 +145,9 @@ class SignTester:
         return None
    
     def update_sentence(self, detected_sign):
-        
+        if detected_sign == "n/a":
+            return  # Do nothing if the detected sign is "n/a"
+    
         if detected_sign == "_":
             self.sentence.append(" ")
         elif detected_sign == ">":
