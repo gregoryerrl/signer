@@ -223,7 +223,7 @@ class SignTester:
                 break
 
             # Flip frame and convert to RGB
-            frame = cv2(frame, 1)
+            
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             results = self.holistic.process(frame_rgb)
 
