@@ -214,7 +214,6 @@ class SignTester:
         cap = cv2.VideoCapture(0)
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 320)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)
-        cap.set(cv2.CAP_PROP_FPS, 15)
         cv2.namedWindow('Sign Language to Text', cv2.WINDOW_NORMAL)
         cv2.resizeWindow('Sign Language to Text', 1280, 720)
 
