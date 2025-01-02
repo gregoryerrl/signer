@@ -230,8 +230,6 @@ class SignTester:
             # Create a display canvas
             display = np.zeros((720, 1280, 3), dtype=np.uint8)
             frame_resized = cv2.resize(frame, (640, 720))
-            if results.face_landmarks:
-                self.mp_drawing.draw_landmarks(frame_resized, results.face_landmarks, self.mp_holistic.FACEMESH_CONTOURS)
             if results.left_hand_landmarks:
                 self.mp_drawing.draw_landmarks(frame_resized, results.left_hand_landmarks, self.mp_holistic.HAND_CONNECTIONS)
             if results.right_hand_landmarks:
