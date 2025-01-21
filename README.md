@@ -19,11 +19,10 @@ A real-time sign language recognition system that allows you to train custom sig
 
 ## Setup Instructions
 
-1. **Clone the Repository**
+1. **Update your codes**
 
    ```bash
-   git clone <your-repo-url>
-   cd <repo-directory>
+   git pull
    ```
 
 2. **Create and Activate Virtual Environment**
