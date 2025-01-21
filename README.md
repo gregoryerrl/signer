@@ -25,16 +25,14 @@ A real-time sign language recognition system that allows you to train custom sig
    git pull
    ```
 
-2. **Create and Activate Virtual Environment**
+2. **Go to Virtual Environment**
 
    - For Windows:
      ```bash
-     python -m venv venv
      venv\Scripts\activate
      ```
    - For macOS/Linux:
      ```bash
-     python3 -m venv venv
      source venv/bin/activate
      ```
 
