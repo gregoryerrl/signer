@@ -28,9 +28,18 @@ class SignTrainer:
         # Recording settings
         self.recording_frames = []
         self.is_recording = False
+        self.is_countdown = False
+        self.countdown_start = 0
         self.frames_to_record = 30  # Record 30 frames for better accuracy
         self.current_sign = None
         self.show_preview = True
+        
+        # Input box settings
+        self.input_text = ""
+        self.is_inputting = False
+        self.input_cursor_visible = True
+        self.last_cursor_toggle = time.time()
+        self.cursor_blink_rate = 0.5  # seconds
 
     def load_sign_data(self):
         """Load existing sign data from JSON file."""
@@ -112,9 +121,75 @@ class SignTrainer:
         center_y = int((y_min + y_max) / 2)
         cv2.circle(frame, (center_x, center_y), 4, color, -1)
 
+    def draw_input_box(self, frame):
+        """Draw an input box for sign name."""
+        # Create semi-transparent overlay for input box
+        overlay = frame.copy()
+        box_width = 400
+        box_height = 100
+        start_x = (frame.shape[1] - box_width) // 2
+        start_y = (frame.shape[0] - box_height) // 2
+        
+        # Draw background box
+        cv2.rectangle(overlay, 
+                     (start_x, start_y),
+                     (start_x + box_width, start_y + box_height),
+                     (0, 0, 0), -1)
+        cv2.addWeighted(overlay, 0.7, frame, 0.3, 0, frame)
+        
+        # Draw border
+        cv2.rectangle(frame,
+                     (start_x, start_y),
+                     (start_x + box_width, start_y + box_height),
+                     (255, 255, 255), 2)
+        
+        # Draw title
+        cv2.putText(frame, "Enter sign name:",
+                   (start_x + 10, start_y + 30),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+        
+        # Draw input text with blinking cursor
+        text_x = start_x + 10
+        text_y = start_y + 70
+        
+        # Toggle cursor visibility
+        if time.time() - self.last_cursor_toggle > self.cursor_blink_rate:
+            self.input_cursor_visible = not self.input_cursor_visible
+            self.last_cursor_toggle = time.time()
+        
+        # Draw text with cursor
+        display_text = self.input_text
+        if self.input_cursor_visible:
+            display_text += "|"
+            
+        cv2.putText(frame, display_text,
+                   (text_x, text_y),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+
+    def handle_key_input(self, key):
+        """Handle keyboard input for the input box."""
+        if not self.is_inputting:
+            return False
+            
+        if key == 27:  # ESC
+            self.is_inputting = False
+            self.input_text = ""
+            return False
+        elif key == 13 or key == ord('\r'):  # Enter
+            if self.input_text.strip():
+                self.is_inputting = False
+                return True
+            return False
+        elif key == 8 or key == 127 or key == ord('\b'):  # Backspace (multiple platform support)
+            if self.input_text:  # Only remove if there's text
+                self.input_text = self.input_text[:-1]
+        elif 32 <= key <= 126:  # Printable characters
+            self.input_text += chr(key)
+        return False
+
     def draw_ui(self, frame):
         """Draw UI elements on the frame."""
-        # Create a semi-transparent overlay for instructions
+        # Create semi-transparent overlay for instructions
         overlay = frame.copy()
         cv2.rectangle(overlay, (10, 10), (400, 200), (0, 0, 0), -1)
         cv2.addWeighted(overlay, 0.7, frame, 0.3, 0, frame)
@@ -130,6 +205,27 @@ class SignTrainer:
                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
         cv2.putText(frame, "Q - Quit", (30, 160), 
                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+
+        # Show countdown if active
+        if self.is_countdown:
+            elapsed = time.time() - self.countdown_start
+            remaining = max(0, 5 - int(elapsed))
+            if remaining > 0:
+                # Draw large countdown number in center
+                font_scale = 5.0
+                thickness = 5
+                text = str(remaining)
+                text_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, font_scale, thickness)[0]
+                text_x = (frame.shape[1] - text_size[0]) // 2
+                text_y = (frame.shape[0] + text_size[1]) // 2
+                cv2.putText(frame, text, (text_x, text_y),
+                           cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 255, 255), thickness)
+                cv2.putText(frame, "Get ready!", (text_x - 50, text_y - 100),
+                           cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
+            else:
+                self.is_countdown = False
+                self.is_recording = True
+                print("\nRecording started!")
 
         # Show recording status and progress
         if self.is_recording:
@@ -181,43 +277,55 @@ class SignTrainer:
                     self.draw_hand_box(frame, hand_landmarks)
 
             # Handle recording
-            if self.is_recording:
+            if self.is_recording and not self.is_countdown:
                 landmarks = self.capture_landmarks(results)
                 if landmarks['left_hand'] or landmarks['right_hand']:
                     self.recording_frames.append(landmarks)
                 
                 if len(self.recording_frames) >= self.frames_to_record:
                     self.is_recording = False
-                    sign_name = input("\nEnter sign name (or press Enter to discard): ").strip().lower()
-                    if sign_name:
-                        if self.add_sign(sign_name, self.recording_frames):
-                            self.save_sign_data()
-                        else:
-                            print("Failed to add sign: No valid hand landmarks detected")
-                    self.recording_frames = []
+                    self.is_inputting = True
+                    self.input_text = ""
 
-            # Draw UI
+            # Draw UI elements
             self.draw_ui(frame)
+            
+            # Draw input box if active
+            if self.is_inputting:
+                self.draw_input_box(frame)
+
             cv2.imshow('Sign Training', frame)
 
             # Handle keyboard input
             key = cv2.waitKey(1) & 0xFF
-            if key == ord('r'):
-                if not self.is_recording:
-                    print("\nStarting recording...")
-                    self.is_recording = True
+            
+            if self.is_inputting:
+                if self.handle_key_input(key):
+                    sign_name = self.input_text.strip().lower()
+                    if self.add_sign(sign_name, self.recording_frames):
+                        self.save_sign_data()
+                    else:
+                        print("Failed to add sign: No valid hand landmarks detected")
                     self.recording_frames = []
-            elif key == ord('l'):
-                signs = sorted(self.signs_data.keys())
-                if signs:
-                    print("\nSaved signs:", ', '.join(signs))
-                else:
-                    print("\nNo signs saved yet")
-            elif key == ord('p'):
-                self.show_preview = not self.show_preview
-                print(f"\nPreview mode {'enabled' if self.show_preview else 'disabled'}")
-            elif key == ord('q'):
-                break
+                    self.input_text = ""
+            else:
+                if key == ord('r'):
+                    if not self.is_recording and not self.is_countdown:
+                        print("\nStarting countdown...")
+                        self.is_countdown = True
+                        self.countdown_start = time.time()
+                        self.recording_frames = []
+                elif key == ord('l'):
+                    signs = sorted(self.signs_data.keys())
+                    if signs:
+                        print("\nSaved signs:", ', '.join(signs))
+                    else:
+                        print("\nNo signs saved yet")
+                elif key == ord('p'):
+                    self.show_preview = not self.show_preview
+                    print(f"\nPreview mode {'enabled' if self.show_preview else 'disabled'}")
+                elif key == ord('q'):
+                    break
 
         cap.release()
         cv2.destroyAllWindows()
